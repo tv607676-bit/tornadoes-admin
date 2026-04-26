@@ -19,6 +19,11 @@ function App() {
     setPage("login");
   };
 
+  const handleMarkAllRead = () => {
+    // Mark all notifications as read logic here
+    console.log("All notifications marked as read");
+  };
+
   if (page === "login") {
     return <Login onLogin={() => setPage("students")} />;
   }
@@ -68,6 +73,7 @@ function App() {
       <Notifications
         onBack={() => setPage("students")}
         onLogout={handleLogout}
+        onMarkAllRead={handleMarkAllRead} // ✅ Fixed - added missing prop
       />
     );
   }
