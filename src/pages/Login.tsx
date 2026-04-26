@@ -17,17 +17,32 @@ export default function Login({ onLogin }: LoginProps) {
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      if (
-        email === "admin@forcetuition.com" &&
-        password === "admin123"
-      ) {
+    try {
+      const response = await fetch("https://api.tornadoes.co.in/api/admin/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data?.token) {
+        // Store token and admin info in localStorage
+        localStorage.setItem("admin_token", data.data.token);
+        localStorage.setItem("admin_email", data.data.admin.email);
+        localStorage.setItem("admin_id", data.data.admin.id);
+        localStorage.setItem("admin_role", data.data.admin.role);
         onLogin();
       } else {
-        setError("Invalid email or password. Please try again.");
+        setError(data.message || "Invalid email or password. Please try again.");
       }
+    } catch (err) {
+      setError("Server error. Please try again later.");
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   return (
@@ -38,8 +53,8 @@ export default function Login({ onLogin }: LoginProps) {
 
       <div className="login-container">
         <div className="login-logo">
-          <div className="logo-icon">F</div>
-          <span className="logo-text">Force Tuition</span>
+          <div className="logo-icon">T</div>
+          <span className="logo-text">Tornadoes Academy</span>
         </div>
 
         <p className="login-subtitle">Admin Portal</p>
@@ -52,9 +67,7 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="form-group">
               <label className="form-label">Email Address</label>
               <div className="input-wrap">
-                <span className="input-icon">
-                  
-                </span>
+                <span className="input-icon"></span>
                 <input
                   type="email"
                   className="form-input"
@@ -69,9 +82,7 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="form-group">
               <label className="form-label">Password</label>
               <div className="input-wrap">
-                <span className="input-icon">
-                 
-                </span>
+                <span className="input-icon"></span>
                 <input
                   type={showPassword ? "text" : "password"}
                   className="form-input"
@@ -114,12 +125,12 @@ export default function Login({ onLogin }: LoginProps) {
 
           <div className="demo-box">
             <p className="demo-title">Demo Credentials:</p>
-            <p className="demo-cred">admin@forcetuition.com / admin123</p>
+            <p className="demo-cred">testadmin@example.com / TestPass123</p>
             <button
               className="demo-fill-btn"
               onClick={() => {
-                setEmail("admin@forcetuition.com");
-                setPassword("admin123");
+                setEmail("testadmin@example.com");
+                setPassword("TestPass123");
               }}
             >
               Auto Fill
