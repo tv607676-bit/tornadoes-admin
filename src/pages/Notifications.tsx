@@ -4,21 +4,29 @@ import "./Notifications.css";
 interface NotificationsProps {
   onBack: () => void;
   onLogout: () => void;
-  onMarkAllRead: () => void;
+  onMarkAllRead?: () => void;
 }
 
 interface UploadedFile {
-  id: number;
+  id: string;
+  newsId: string;
   name: string;
   size: string;
   uploadedAt: string;
 }
 
-export default function Notifications({ onBack, onLogout }: NotificationsProps) {
+export default function Notifications({
+  onBack,
+  onLogout,
+  onMarkAllRead, // ✅ fixed
+}: NotificationsProps) {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const token = localStorage.getItem("admin_token");
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -26,24 +34,68 @@ export default function Notifications({ onBack, onLogout }: NotificationsProps) 
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const handlePDFUpload = (file: File) => {
+  const handlePDFUpload = async (file: File) => {
     if (file.type !== "application/pdf") {
-      alert("Only PDF files are allowed.");
+      setUploadError("Only PDF files are allowed.");
       return;
     }
+
+    const maxBytes = 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setUploadError("File size must be under 10MB.");
+      return;
+    }
+
+    setUploadError("");
     setUploading(true);
-    setTimeout(() => {
-      setUploading(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("job_title", file.name.replace(".pdf", ""));
+      formData.append("description", "Uploaded PDF document");
+      formData.append("pdf", file);
+
+      const res = await fetch("https://api.tornadoes.co.in/api/news", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      const newsId = data?.data?.id;
+
+      if (!newsId) {
+        setUploadError("Upload failed.");
+        return;
+      }
+
+      // ✅ Upload success ആയാൽ onMarkAllRead call ചെയ്യുന്നു
+      onMarkAllRead?.();
+
       setUploadedFiles((prev) => [
         {
-          id: Date.now(),
+          id: crypto.randomUUID(),
+          newsId: String(newsId),
           name: file.name,
           size: formatSize(file.size),
-          uploadedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          uploadedAt: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
         },
         ...prev,
       ]);
-    }, 1200);
+    } catch {
+      setUploadError("Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeFile = (fileId: string) => {
+    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,14 +111,8 @@ export default function Notifications({ onBack, onLogout }: NotificationsProps) 
     if (file) handlePDFUpload(file);
   };
 
-  const removeFile = (id: number) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
-  };
-
   return (
     <div className="notif-page">
-
-      {/* ── NAVBAR — identical to Students page ── */}
       <nav className="students-nav">
         <div className="nav-brand">
           <div className="nav-logo">F</div>
@@ -86,16 +132,13 @@ export default function Notifications({ onBack, onLogout }: NotificationsProps) 
         </div>
       </nav>
 
-      {/* ── MAIN ── */}
       <main className="notif-main">
-
-        {/* Back + page title */}
         <div className="notif-page-header">
           <button className="back-btn" onClick={onBack}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            Back to Students
+            Back
           </button>
           <div>
             <h1 className="page-title">Upload PDF</h1>
@@ -103,7 +146,6 @@ export default function Notifications({ onBack, onLogout }: NotificationsProps) 
           </div>
         </div>
 
-        {/* ── PDF UPLOAD ZONE ── */}
         <div
           className={`pdf-upload-zone${dragOver ? " drag-over" : ""}${uploading ? " uploading" : ""}`}
           onClick={() => !uploading && fileInputRef.current?.click()}
@@ -134,35 +176,35 @@ export default function Notifications({ onBack, onLogout }: NotificationsProps) 
                   <polyline points="9 15 12 12 15 15" />
                 </svg>
               </div>
-              <p className="upload-label">{dragOver ? "Drop your PDF here" : "Click to upload PDF"}</p>
-              <p className="upload-hint">or drag & drop · PDF files only</p>
+              <p className="upload-label">
+                {dragOver ? "Drop your PDF here" : "Click to upload PDF"}
+              </p>
+              <p className="upload-hint">or drag & drop · PDF only · max 10MB</p>
               <span className="upload-btn">Browse File</span>
             </>
           )}
         </div>
 
-        {/* ── UPLOADED FILES LIST ── */}
+        {uploadError && <div className="upload-error">{uploadError}</div>}
+
         {uploadedFiles.length > 0 && (
           <div className="uploaded-section">
             <p className="uploaded-heading">Uploaded Files</p>
             <div className="uploaded-list">
-              {uploadedFiles.map((f) => (
-                <div key={f.id} className="uploaded-card">
-                  <div className="uploaded-pdf-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                  </div>
+              {uploadedFiles.map((file) => (
+                <div key={file.id} className="uploaded-card">
                   <div className="uploaded-info">
-                    <p className="uploaded-name">{f.name}</p>
-                    <p className="uploaded-meta">{f.size} · Uploaded at {f.uploadedAt}</p>
+                    <p className="uploaded-name">{file.name}</p>
+                    <p className="uploaded-meta">
+                      {file.size} · Uploaded at {file.uploadedAt}
+                    </p>
                   </div>
-                  <button className="uploaded-remove" onClick={() => removeFile(f.id)} title="Remove">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                  <button
+                    className="uploaded-remove"
+                    onClick={() => removeFile(file.id)}
+                    title="Remove"
+                  >
+                    ×
                   </button>
                 </div>
               ))}
