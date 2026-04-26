@@ -5,11 +5,19 @@ import AddStudent from "./pages/Addstudent";
 import EnquiryList from "./pages/Enquirylist";
 import Notifications from "./pages/Notifications";
 
-type Page = "login" | "students" | "add-student" | "enquiry" | "notifications";
+type Page = "login" | "students" | "add-student" | "view-student" | "edit-student" | "enquiry" | "notifications";
 
 function App() {
   const [page, setPage] = useState<Page>("login");
-  const [notificationCount, setNotificationCount] = useState(3); // initial unread count
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | undefined>(undefined);
+
+  const handleLogout = () => {
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_email");
+    localStorage.removeItem("admin_id");
+    localStorage.removeItem("admin_role");
+    setPage("login");
+  };
 
   if (page === "login") {
     return <Login onLogin={() => setPage("students")} />;
@@ -19,7 +27,29 @@ function App() {
     return (
       <AddStudent
         onBack={() => setPage("students")}
-        onLogout={() => setPage("login")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (page === "view-student") {
+    return (
+      <AddStudent
+        candidateId={selectedCandidateId}
+        viewOnly={true}
+        onBack={() => setPage("students")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (page === "edit-student") {
+    return (
+      <AddStudent
+        candidateId={selectedCandidateId}
+        viewOnly={false}
+        onBack={() => setPage("students")}
+        onLogout={handleLogout}
       />
     );
   }
@@ -28,7 +58,7 @@ function App() {
     return (
       <EnquiryList
         onBack={() => setPage("students")}
-        onLogout={() => setPage("login")}
+        onLogout={handleLogout}
       />
     );
   }
@@ -37,19 +67,26 @@ function App() {
     return (
       <Notifications
         onBack={() => setPage("students")}
-        onLogout={() => setPage("login")}
-        onMarkAllRead={() => setNotificationCount(0)}
+        onLogout={handleLogout}
       />
     );
   }
 
   return (
     <Students
-      onLogout={() => setPage("login")}
+      onLogout={handleLogout}
       onAddStudent={() => setPage("add-student")}
       onEnquiry={() => setPage("enquiry")}
       onNotifications={() => setPage("notifications")}
-      notificationCount={notificationCount}
+      notificationCount={0}
+      onView={(id) => {
+        setSelectedCandidateId(id);
+        setPage("view-student");
+      }}
+      onEdit={(id) => {
+        setSelectedCandidateId(id);
+        setPage("edit-student");
+      }}
     />
   );
 }

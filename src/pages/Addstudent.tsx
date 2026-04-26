@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./AddStudent.css";
 
 interface AddStudentProps {
   onBack: () => void;
   onLogout: () => void;
+  candidateId?: string;   // if set → view or edit mode
+  viewOnly?: boolean;     // if true → read-only view
 }
 
-export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
+export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = false }: AddStudentProps) {
   const [form, setForm] = useState({
     fullName: "",
     address: "",
@@ -34,9 +36,75 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
     balanceAmount: "",
     paymentMethod: "",
     paymentNote: "",
+    paymentDueDate: "",
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successData, setSuccessData] = useState<{ id: string; name: string } | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(!!candidateId);
+
+  // Fetch existing candidate details for view/edit
+  useEffect(() => {
+    if (!candidateId) return;
+    const load = async () => {
+      setFetchLoading(true);
+      try {
+        const token = localStorage.getItem("admin_token") ?? "";
+        const res = await fetch(`https://api.tornadoes.co.in/api/candidate/${candidateId}`, {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) throw new Error(json?.message || "Failed to load candidate.");
+        const d = json.data;
+        const pi = d.physical_information ?? {};
+        const ed = d.enrollment_details ?? {};
+        const pd = d.payment_details ?? {};
+        const pg = d.parent_guardian_information ?? {};
+        const amountPaid = pd.amount_paid ?? 0;
+        const totalFee   = pd.total_fee ?? 0;
+        const isUnpaidMode = amountPaid < totalFee;
+        setForm({
+          fullName:       d.full_name ?? "",
+          address:        d.address ?? "",
+          dob:            d.date_of_birth ? d.date_of_birth.split("T")[0] : "",
+          age:            String(d.age ?? ""),
+          gender:         d.gender ?? "",
+          bloodGroup:     d.blood_group ?? "",
+          mobile:         d.mobile_no ?? "",
+          qualification:  d.qualification ?? "",
+          height:         pi.height != null ? String(pi.height) : "",
+          weight:         pi.weight != null ? String(pi.weight) : "",
+          eyesight:       pi.eyesight ?? "",
+          flatFoot:       pi.flat_foot === true ? "Yes" : pi.flat_foot === false ? "No" : "",
+          knee:           pi.knee_issue === true ? "Yes" : pi.knee_issue === false ? "No" : "",
+          enrollmentDate: ed.enrollment_date ? ed.enrollment_date.split("T")[0] : new Date().toISOString().split("T")[0],
+          status:         ed.status ?? "active",
+          parentName:     pg.name ?? "",
+          parentRelation: pg.relation ?? "",
+          parentMobile:   pg.mobile ?? "",
+          parentEmail:    pg.email ?? "",
+          parentAddress:  pg.address ?? "",
+          paymentStatus:  isUnpaidMode ? "unpaid" : "paid",
+          totalFee:       totalFee ? String(totalFee) : "",
+          paidAmount:     amountPaid ? String(amountPaid) : "",
+          balanceAmount:  pd.balance_amount != null ? String(pd.balance_amount) : "0",
+          paymentMethod:  pd.payment_method ?? "",
+          paymentNote:    pd.payment_note ?? "",
+          paymentDueDate: pd.due_date ? pd.due_date.split("T")[0] : "",
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to load candidate details.");
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateId]);
 
   const handle = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -58,13 +126,88 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const buildPayload = () => {
+    const isUnpaid = form.paymentStatus === "unpaid";
+
+    return {
+      full_name: form.fullName,
+      mobile_no: form.mobile,
+      address: form.address,
+      date_of_birth: form.dob,
+      age: Number(form.age),
+      gender: form.gender,
+      blood_group: form.bloodGroup,
+      qualification: form.qualification,
+      physical_information: {
+        height: form.height ? Number(form.height) : null,
+        weight: form.weight ? Number(form.weight) : null,
+        eyesight: form.eyesight || null,
+        flat_foot: form.flatFoot === "Yes" ? true : form.flatFoot === "No" ? false : null,
+        knee_issue: form.knee === "Yes" ? true : form.knee === "No" ? false : null,
+      },
+      enrollment_details: {
+        enrollment_date: form.enrollmentDate,
+        status: form.status,
+      },
+      payment_details: {
+        total_fee: form.totalFee ? Number(form.totalFee) : 0,
+        payment_method: form.paymentMethod || null,
+        payment_note: form.paymentNote || null,
+        amount_paid: isUnpaid
+          ? form.paidAmount ? Number(form.paidAmount) : 0
+          : form.totalFee ? Number(form.totalFee) : 0,
+        balance_amount: isUnpaid
+          ? form.balanceAmount ? Number(form.balanceAmount) : 0
+          : 0,
+        due_date: isUnpaid && form.paymentDueDate ? form.paymentDueDate : null,
+      },
+      parent_guardian_information: {
+        name: form.parentName,
+        relation: form.parentRelation,
+        mobile: form.parentMobile,
+        email: form.parentEmail || null,
+        address: form.parentAddress || null,
+      },
+    };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    setTimeout(() => {
+    setError(null);
+    setSuccessData(null);
+
+    try {
+      const token = localStorage.getItem("admin_token") ?? "";
+      const url = candidateId
+        ? `https://api.tornadoes.co.in/api/candidate/${candidateId}`
+        : "https://api.tornadoes.co.in/api/candidate";
+      const method = candidateId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(buildPayload()),
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || `Request failed with status ${response.status}`);
+      }
+
+      setSuccessData({ id: json.data.id, name: json.data.name });
+      setTimeout(() => {
+        setSubmitted(false);
+        onBack();
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
       setSubmitted(false);
-      onBack();
-    }, 1500);
+    }
   };
 
   const isUnpaid = form.paymentStatus === "unpaid";
@@ -74,18 +217,14 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
       {/* ── NAVBAR ── */}
       <nav className="students-nav">
         <div className="nav-brand">
-          <div className="nav-logo">F</div>
+          <div className="nav-logo">T</div>
           <div>
-            <div className="nav-title">Force Admin</div>
+            <div className="nav-title">Tornadoes Academy</div>
             <div className="nav-sub">Student Management</div>
           </div>
         </div>
         
         <div className="nav-user">
-          {/* <div className="nav-user-info">
-            <div className="nav-user-name">Admin User</div>
-            <div className="nav-user-role">Admin</div>
-          </div> */}
           <button className="nav-logout" onClick={onLogout} title="Logout">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -107,11 +246,83 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
         </button>
 
         <div className="add-header">
-          <h1 className="add-title">Add New Student</h1>
-          <p className="add-desc">Enter student information to create a new record</p>
+          <h1 className="add-title">
+            {viewOnly ? "View Student" : candidateId ? "Edit Student" : "Add New Student"}
+          </h1>
+          <p className="add-desc">
+            {viewOnly
+              ? "Viewing student information"
+              : candidateId
+              ? "Update student information"
+              : "Enter student information to create a new record"}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="add-form">
+        {/* ── FETCH LOADING ── */}
+        {fetchLoading && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "20px 0", color: "#9a9ab0",
+            fontFamily: "'Sora', sans-serif", fontSize: "14px",
+          }}>
+            <span className="spinner-sm" style={{ borderColor: "#e0e0f0", borderTopColor: "#7c3de8" }} />
+            Loading candidate details...
+          </div>
+        )}
+
+        {/* ── SUCCESS BANNER ── */}
+        {successData && (
+          <div style={{
+            marginBottom: "16px",
+            padding: "12px 16px",
+            borderRadius: "10px",
+            background: "#e6f9f0",
+            border: "1.5px solid #6ee7b7",
+            color: "#065f46",
+            fontFamily: "'Sora', sans-serif",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>
+              Candidate created successfully! &nbsp;
+              <span style={{ opacity: 0.6, fontSize: "12px" }}>
+                ID: {successData.id} · {successData.name}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* ── ERROR BANNER ── */}
+        {error && (
+          <div style={{
+            marginBottom: "16px",
+            padding: "12px 16px",
+            borderRadius: "10px",
+            background: "#fff0f0",
+            border: "1.5px solid #fca5a5",
+            color: "#dc2626",
+            fontFamily: "'Sora', sans-serif",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            {error}
+          </div>
+        )}
+
+        {!fetchLoading && (
+        <form onSubmit={viewOnly ? (e) => e.preventDefault() : handleSubmit} className="add-form" style={ viewOnly ? { pointerEvents: "none", opacity: 0.85 } : {} }>
 
           {/* ── SECTION 1: Personal Information ── */}
           <div className="form-section">
@@ -272,7 +483,7 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
               Payment Details
             </div>
 
-            {/* Paid / Unpaid Toggle — inline styles to bypass CSS cascade */}
+            {/* Paid / Unpaid Toggle */}
             <div style={{
               display: "inline-flex",
               border: "1.5px solid #e8e8f0",
@@ -400,7 +611,7 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
                   </div>
                   <div className="form-group">
                     <label>Due Date</label>
-                    <input type="date" name="paymentDueDate" onChange={handle} />
+                    <input type="date" name="paymentDueDate" value={form.paymentDueDate} onChange={handle} />
                   </div>
                 </div>
               </div>
@@ -470,22 +681,27 @@ export default function AddStudent({ onBack, onLogout }: AddStudentProps) {
 
           {/* ── ACTIONS ── */}
           <div className="form-actions">
-            <button type="button" className="btn-cancel" onClick={onBack}>Cancel</button>
-            <button type="submit" className="btn-submit" disabled={submitted}>
-              {submitted ? (
-                <><span className="spinner-sm" /> Saving...</>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Save Student
-                </>
-              )}
+            <button type="button" className="btn-cancel" onClick={onBack}>
+              {viewOnly ? "Close" : "Cancel"}
             </button>
+            {!viewOnly && (
+              <button type="submit" className="btn-submit" disabled={submitted}>
+                {submitted ? (
+                  <><span className="spinner-sm" /> Saving...</>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {candidateId ? "Update Student" : "Save Student"}
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
         </form>
+        )} {/* end !fetchLoading */}
       </main>
     </div>
   );
