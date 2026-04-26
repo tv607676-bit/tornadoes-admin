@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import "./AddStudent.css";
+import "./Addstudent.css";
 
 interface AddStudentProps {
   onBack: () => void;
