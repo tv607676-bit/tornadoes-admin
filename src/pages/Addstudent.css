@@ -353,3 +353,26 @@ html, body, #root { margin: 0; padding: 0; width: 100%; min-height: 100vh; overf
   .payment-toggle { width: 100%; }
   .toggle-btn { flex: 1; justify-content: center; }
 }
+/* Add this to your existing Addstudent.css */
+
+.btn-delete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1.5px solid #fca5a5;
+  background: #fff0f0;
+  color: #dc2626;
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-right: auto; /* pushes it to the left, away from Cancel/Save */
+}
+
+.btn-delete:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
