@@ -3,6 +3,7 @@ import "./Students.css";
 
 interface Student {
   id: string;
+  student_id: string;
   name: string;
   mail_id: string;
   mobile_number: string;
@@ -357,7 +358,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
                       </div>
                       <div className="student-meta">
                         <span style={{ fontSize: "12px", color: "#6b6b8a", fontFamily: "'Sora', sans-serif", fontWeight: 500 }}>
-                          ID: {student.id}
+                          ID: {student.student_id}
                         </span>
                       </div>
                     </div>
