@@ -123,19 +123,7 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
 
-          <div className="demo-box">
-            <p className="demo-title">Demo Credentials:</p>
-            <p className="demo-cred">testadmin@example.com / TestPass123</p>
-            <button
-              className="demo-fill-btn"
-              onClick={() => {
-                setEmail("testadmin@example.com");
-                setPassword("TestPass123");
-              }}
-            >
-              Auto Fill
-            </button>
-          </div>
+          
         </div>
       </div>
     </div>
