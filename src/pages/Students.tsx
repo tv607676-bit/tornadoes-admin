@@ -11,7 +11,6 @@ interface Student {
   created_at: string;
 }
 
-
 interface StudentsProps {
   onLogout: () => void;
   onAddStudent: () => void;
@@ -26,6 +25,7 @@ const PAGE_SIZE_OPTIONS = [4, 8, 12];
 
 export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifications, onView, onEdit }: StudentsProps) {
   const [students, setStudents] = useState<Student[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -33,13 +33,13 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(4);
 
-  const fetchStudents = async (searchVal = "") => {
+  const fetchStudents = async (searchVal = "", page = currentPage, size = pageSize) => {
     setLoading(true);
     setError(null);
     try {
       const url = new URL("https://api.tornadoes.co.in/api/candidate");
-      url.searchParams.set("page", String(currentPage));
-      url.searchParams.set("limit", String(pageSize));
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("limit", String(size));
       url.searchParams.set("search", searchVal);
       url.searchParams.set("gender", "");
       url.searchParams.set("place", "");
@@ -60,17 +60,19 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
       }
 
       const json = await response.json();
-      const raw: Student[] = Array.isArray(json.data)
-        ? json.data
-        : Array.isArray(json)
-        ? json
-        : [];
+
+      // ✅ API returns { count, data, success }
+      const raw: Student[] = Array.isArray(json.data) ? json.data : [];
+      setTotalCount(json.count ?? raw.length);
+
       setStudents(
         raw
           .filter((s) => s && typeof s === "object")
           .map((s) => ({
             ...s,
-            status: (String(s.status ?? "").toLowerCase() === "active" ? "Active" : "Inactive") as "Active" | "Inactive",
+            status: (String(s.status ?? "").toLowerCase() === "active"
+              ? "Active"
+              : "Inactive") as "Active" | "Inactive",
           }))
       );
     } catch (err: any) {
@@ -81,7 +83,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
   };
 
   useEffect(() => {
-    fetchStudents(search);
+    fetchStudents(search, currentPage, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, pageSize]);
 
@@ -89,7 +91,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1);
-      fetchStudents(search);
+      fetchStudents(search, 1, pageSize);
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,19 +102,31 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
     setCurrentPage(1);
   }, [statusFilter, pageSize]);
 
+  // ✅ Status filter client-side
   const filtered = students.filter((s) => {
-    const matchStatus =
-      statusFilter === "All Status" ||
-      (s.status ?? "").toLowerCase() === statusFilter.toLowerCase();
-    return matchStatus;
+    if (statusFilter === "All Status") return true;
+    return (s.status ?? "").toLowerCase() === statusFilter.toLowerCase();
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // ✅ Use API count for total pages
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this student?")) {
-      setStudents((prev) => prev.filter((s) => s.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this student?")) return;
+    try {
+      const token = localStorage.getItem("admin_token") ?? "";
+      const response = await fetch(`https://api.tornadoes.co.in/api/candidate/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error("Delete failed.");
+      // ✅ Refresh list after delete
+      fetchStudents(search, currentPage, pageSize);
+    } catch (err: any) {
+      alert(err.message || "Delete failed.");
     }
   };
 
@@ -150,7 +164,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
   const avatarColors = ["#3b4cff", "#7c3de8", "#e83b9b", "#3be8a0", "#e8a03b", "#3bb4e8", "#e83b3b", "#3be860"];
   const getColor = (id: string) => avatarColors[id.charCodeAt(0) % avatarColors.length];
 
-
   const getPageNumbers = () => {
     const pages: (number | "...")[] = [];
     if (totalPages <= 7) {
@@ -167,7 +180,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
 
   return (
     <div className="students-page">
-      {/* ── NAVBAR ── */}
+      {/* NAVBAR */}
       <nav className="students-nav">
         <div className="nav-brand">
           <div className="nav-logo">T</div>
@@ -176,7 +189,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
             <div className="nav-sub">Student Management</div>
           </div>
         </div>
-
         <div className="nav-user">
           <button className="nav-bell" onClick={onNotifications} title="Notifications">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -184,7 +196,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
           </button>
-
           <button className="nav-logout" onClick={onLogout} title="Logout">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -195,7 +206,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
         </div>
       </nav>
 
-      {/* ── MAIN ── */}
       <main className="students-main">
         {/* Header */}
         <div className="page-header">
@@ -212,7 +222,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
               </svg>
               Export CSV
             </button>
-
             <button className="btn-enquiry" onClick={onEnquiry}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -221,7 +230,6 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
               </svg>
               Enquiry
             </button>
-
             <button className="btn-add" onClick={onAddStudent}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -265,11 +273,11 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
         {/* Count + per-page */}
         <div className="results-bar">
           <p className="results-count">
-            {loading ? (
-              "Loading..."
-            ) : (
+            {loading ? "Loading..." : (
               <>
-                Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, filtered.length)}</strong>–<strong>{Math.min(currentPage * pageSize, filtered.length)}</strong> of <strong>{filtered.length}</strong> students
+                Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, totalCount)}</strong>–
+                <strong>{Math.min(currentPage * pageSize, totalCount)}</strong> of{" "}
+                <strong>{totalCount}</strong> students
               </>
             )}
           </p>
@@ -287,21 +295,9 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
           </div>
         </div>
 
-        {/* ── ERROR STATE ── */}
+        {/* Error */}
         {error && (
-          <div style={{
-            margin: "0 0 16px",
-            padding: "12px 16px",
-            borderRadius: "10px",
-            background: "#fff0f0",
-            border: "1.5px solid #fca5a5",
-            color: "#dc2626",
-            fontFamily: "'Sora', sans-serif",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}>
+          <div style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: "10px", background: "#fff0f0", border: "1.5px solid #fca5a5", color: "#dc2626", fontFamily: "'Sora', sans-serif", fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
@@ -309,7 +305,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
             </svg>
             {error}
             <button
-              onClick={() => fetchStudents(search)}
+              onClick={() => fetchStudents(search, currentPage, pageSize)}
               style={{ marginLeft: "auto", background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", fontWeight: 600 }}
             >
               Retry
@@ -317,7 +313,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
           </div>
         )}
 
-        {/* ── LOADING SKELETON ── */}
+        {/* Loading Skeleton */}
         {loading && (
           <div className="students-list">
             {Array.from({ length: pageSize }).map((_, i) => (
@@ -346,7 +342,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
                 <p>No students found</p>
               </div>
             ) : (
-              paginated.map((student) => (
+              filtered.map((student) => (
                 <div className="student-card" key={student.id}>
                   <div className="student-left">
                     <div className="student-avatar" style={{ background: getColor(student.id ?? "0") }}>
@@ -355,7 +351,9 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
                     <div className="student-info">
                       <div className="student-name-row">
                         <span className="student-name">{student.name}</span>
-                        <span className={`status-badge ${(student.status ?? "").toLowerCase()}`}>{student.status ?? "—"}</span>
+                        <span className={`status-badge ${(student.status ?? "").toLowerCase()}`}>
+                          {student.status ?? "—"}
+                        </span>
                       </div>
                       <div className="student-meta">
                         <span style={{ fontSize: "12px", color: "#6b6b8a", fontFamily: "'Sora', sans-serif", fontWeight: 500 }}>
@@ -373,7 +371,9 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
                         </svg>
                         {student.mobile_number}
                       </span>
-                      <span className="parent-info">Parent: <strong>{student.parent}</strong></span>
+                      {student.parent && (
+                        <span className="parent-info">Parent: <strong>{student.parent}</strong></span>
+                      )}
                     </div>
                     <div className="student-actions">
                       <button className="btn-action view" onClick={() => onView(student.id)}>
@@ -407,7 +407,7 @@ export default function Students({ onLogout, onAddStudent, onEnquiry, onNotifica
           </div>
         )}
 
-        {/* ── PAGINATION ── */}
+        {/* Pagination */}
         {!loading && totalPages > 1 && (
           <div className="pagination">
             <button
