@@ -25,6 +25,7 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
     knee: "",
     enrollmentDate: new Date().toISOString().split("T")[0],
     status: "Active",
+    trainingCenter: "",
     parentName: "",
     parentRelation: "",
     parentMobile: "",
@@ -45,6 +46,17 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
   const [fetchLoading, setFetchLoading] = useState(!!candidateId);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const TRAINING_CENTERS = [
+    "Kannur",
+    "Cheemeni",
+    "Mathamangalam",
+    "Kunjimangalam",
+    "Azhikkal",
+    "Chembilode",
+    "Koothuparamba",
+    "Iritty",
+  ];
 
   const cleanMobile = (val: string) =>
     val.replace(/^\+91/, "").replace(/\D/g, "").slice(-10);
@@ -89,8 +101,8 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
 
         const d = json.data;
 
-        const amountPaid  = d.amount_paid ?? 0;
-        const totalFee    = d.total_fee ?? 0;
+        const amountPaid   = d.amount_paid ?? 0;
+        const totalFee     = d.total_fee ?? 0;
         const isUnpaidMode = amountPaid < totalFee;
 
         setForm({
@@ -109,6 +121,8 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
           knee:           d.knee_issue === true ? "Yes" : d.knee_issue === false ? "No" : "",
           enrollmentDate: d.enrollment_date ? d.enrollment_date.split("T")[0] : new Date().toISOString().split("T")[0],
           status:         d.status ?? "Active",
+          // ✅ GET: training_center അല്ലെങ്കിൽ trainingcenter രണ്ടും handle ചെയ്യുന്നു
+          trainingCenter: d.training_center ?? d.trainingcenter ?? "",
           parentName:     d.father_name ?? "",
           parentRelation: d.parent_relation ?? "",
           parentMobile:   d.parent_mobile ?? "",
@@ -167,16 +181,18 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
       payment_note:   form.paymentNote   || null,
     };
 
+    // ✅ CREATE — POST
     if (!candidateId) {
       return {
-        full_name:     form.fullName,
-        mobile_no:     cleanMobile(form.mobile),
-        address:       form.address,
-        date_of_birth: form.dob,
-        age:           Number(form.age),
-        gender:        form.gender,
-        blood_group:   form.bloodGroup,
-        qualification: form.qualification,
+        full_name:      form.fullName,
+        mobile_no:      cleanMobile(form.mobile),
+        address:        form.address,
+        date_of_birth:  form.dob,
+        age:            Number(form.age),
+        gender:         form.gender,
+        blood_group:    form.bloodGroup,
+        qualification:  form.qualification,
+        trainingcenter: form.trainingCenter?.toLowerCase() || null, // ✅ no underscore, lowercase
         physical_information: {
           height:     form.height ? Number(form.height) : null,
           weight:     form.weight ? Number(form.weight) : null,
@@ -199,6 +215,7 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
       };
     }
 
+    // ✅ UPDATE — PUT (flat format)
     return {
       full_name:       form.fullName,
       mobile_no:       cleanMobile(form.mobile),
@@ -215,6 +232,7 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
       knee_issue:      form.knee === "Yes" ? true : form.knee === "No" ? false : null,
       enrollment_date: form.enrollmentDate,
       status:          form.status,
+      training_center: form.trainingCenter || null, // PUT-ൽ underscore
       ...paymentDetails,
       parent_name:     form.parentName,
       parent_relation: form.parentRelation,
@@ -482,6 +500,15 @@ export default function AddStudent({ onBack, onLogout, candidateId, viewOnly = f
                     <option value="Inactive">Inactive</option>
                   </select>
                 </div>
+              </div>
+              <div className="form-group full">
+                <label>Training Center <span className="req">*</span></label>
+                <select name="trainingCenter" value={form.trainingCenter} onChange={handle} required>
+                  <option value="">Select Training Center</option>
+                  {TRAINING_CENTERS.map((center) => (
+                    <option key={center} value={center}>{center}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
